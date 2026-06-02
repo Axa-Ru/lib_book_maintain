@@ -1,0 +1,8 @@
+.idea/
+__pycache__/
+arc/
+fonts/
+*.pyc
+profile/*.log
+*.log
+*.db
