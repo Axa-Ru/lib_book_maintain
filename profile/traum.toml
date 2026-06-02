@@ -1,0 +1,55 @@
+# config.toml
+[paths]
+src_base = ""       # сюда после проверки запишется путь к библиотеке, которую будем обрабатывать
+src_prod_base = "/home/axa/Media/nas4d0/Books/traum/epub.1807"
+src_test_base = "/home/axa/Stuff/book/000_tst_lib/#library"
+use_test = true
+
+[directories]
+zip = "zip"
+zip_done = "zip_done"
+dest = "cand"
+fb2err = "fb2err"
+
+# Директории неверной последовательностью имени
+ru_flm = "ru_flm"
+ru_fml = "ru_fml"
+ru_mfl = "ru_mfl"
+ru_mlf = "ru_mlf"
+# Директория с исправленной последовательностью <last_name> <first_name> <middle_name>
+ru_lfm = "ru_lfm"
+
+[common]
+enable_logs = true          # логирование
+log_file = "traum.log"
+subs_ye_yo = true           # заменить букву "е" на "ё" в именах, сериях и названиях
+
+[fbc]
+# ключи командной строки fbc
+overwrite = "--ow"
+
+[libs]
+merge_author = true         # объединить авторов
+join_lib = false            # объединить библиотеки
+
+[author]
+authors_norm_name = true    # если необходимо записывает ФИО автора
+authors_deduplicate = true  # пытается найти одного автора в разных каталогах
+
+[series]
+compare_ratio = 81          # порог совпадения при сравнении имен серий
+
+[book]
+title_change = true         # производить замену подстрок в title и series
+title_substr = [
+    [ "(сборник)", "(Сб)" ],
+    [ "[СИ]", "(СИ)"],
+    [ "[СИ litres]", "(Си)"],
+    [ "[litres самиздат]", "(Си)"],
+    [ "[litres]", "" ],
+    [ "[publisher- SelfPub]", "" ],
+    [ "@bookiniers", "" ],
+    [ "[сетевая публикация]", "(СП)"]
+]
+strip_series_in_name = true   # удалить имя серии в имени книги
+title_min_limit = 8         # минимальная длина названия книги
