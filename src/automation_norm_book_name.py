@@ -6,7 +6,7 @@ from library_class import Library
 import logging
 
 
-def automation_norm_book_name(library: 'Library', book_cfg: dict):
+def automation_norm_book_name(library: 'Library', book_cfg: dict) -> int:
     logging.info("Шаг 4: Нормализация имен файлов книг...")
     for lang, letters in library.catalog.items():
         for letter, authors in letters.items():

@@ -5,7 +5,7 @@
 from library_class import Library
 import logging
 
-def automation_join_series(library: 'Library'):
+def automation_join_series(library: 'Library') -> int:
     logging.info("Шаг 3: Поиск и объединение похожих серий внутри авторов...")
     for lang, letters in library.catalog.items():
         for letter, authors in letters.items():

@@ -4,7 +4,7 @@
 from library_class import Library
 import logging
 
-def automation_norm_series(library: 'Library', replaces: dict) -> None:
+def automation_norm_series(library: 'Library', replaces: dict) -> int:
     # === ШАГ 2: Нормализация названий серий и их папок ===
     logging.info("Шаг 2: Нормализация названий серий...")
     for lang, letters in library.catalog.items():

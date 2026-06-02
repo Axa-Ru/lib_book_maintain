@@ -73,7 +73,7 @@ class Series:
         if not source_dir.exists() or not target_dir.exists():
             return False
 
-        # Обходим все книги текущей (поглощаемой) серии
+        # Обходим копию списка книг текущей (поглощаемой) серии
         for my_book in list(self.books):
             target_book_path = target_dir / my_book.path.name
 
@@ -81,6 +81,11 @@ class Series:
             if not target_book_path.is_file():
                 try:
                     shutil.move(str(my_book.path), str(target_dir))
+
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем путь внутри самого объекта книги,
+                    # чтобы при последующих сравнениях он указывал на её новое физическое место!
+                    my_book.path = target_book_path
+
                     other_series.books.append(my_book)
                 except Exception:
                     return False
@@ -91,11 +96,19 @@ class Series:
 
             if result == 1:
                 # Текущий файл больше/лучше — удаляем старый, перемещаем новый
-                target_book_path.unlink()
-                shutil.move(str(my_book.path), str(target_dir))
+                # missing_ok=True гарантирует, что если файл пропал, код не упадет
+                target_book_path.unlink(missing_ok=True)
+
+                try:
+                    shutil.move(str(my_book.path), str(target_dir))
+                    my_book.path = target_book_path  # 🔥 Обновляем путь в объекте
+                    other_series.books.append(my_book)
+                except Exception:
+                    return False
             elif result == 2 or result == 0:
-                # На диске файл лучше или равен — текущий просто удаляем
-                my_book.path.unlink()
+                # На диске файл лучше или равен — текущую копию просто удаляем
+                # 🔥 ИСПРАВЛЕНО: missing_ok=True защищает от FileNotFoundError
+                my_book.path.unlink(missing_ok=True)
 
         # После переноса всех книг удаляем пустую исходную папку серии
         try:
