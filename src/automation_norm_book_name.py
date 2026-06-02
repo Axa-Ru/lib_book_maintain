@@ -6,7 +6,7 @@ from library_class import Library
 import logging
 
 
-def automation_norm_book_name(library: 'Library', book_cfg: dict) -> int:
+def automation_norm_book_name(library: 'Library', book_cfg: dict, stats: dict):
     logging.info("Шаг 4: Нормализация имен файлов книг...")
     for lang, letters in library.catalog.items():
         for letter, authors in letters.items():
@@ -26,9 +26,11 @@ def automation_norm_book_name(library: 'Library', book_cfg: dict) -> int:
                                 if res == 1:
                                     new_path.unlink()
                                     old_path.rename(new_path)
+                                    stats["deleted_books"] += 1
                                     logging.info(f"  Заменен дубликат: {new_filename} (текущий файл больше)")
                                 elif res == 2:
                                     old_path.unlink()
+                                    stats["deleted_books"] += 1
                                     logging.info(f"  Удален дубликат:  {old_path.name}")
                             else:
                                 try:

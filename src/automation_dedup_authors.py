@@ -9,7 +9,7 @@ from library_class import Library
 from author_class import Author
 
 
-def automation_dedup_authors(library: 'Library', author_cfg: dict):
+def automation_dedup_authors(library: 'Library', author_cfg: dict, stats: dict):
     if author_cfg.get("authors_deduplicate", True):
         logging.info("Шаг 5: Поиск и объединение дубликатов авторов (Индексная дедупликация по Фамилиям)...")
 
@@ -66,6 +66,7 @@ def automation_dedup_authors(library: 'Library', author_cfg: dict):
                                 # Физический перенос уникальных книг и зачистка папки
                                 success = author_secondary.join_with(author_primary)
                                 if success:
+                                    stats["merged_authors"] += 1
                                     logging.info(
                                         f"  Успешно объединены: {author_secondary.name} ──> {author_primary.name}")
                                     processed_folders.add(author_secondary.folder_path)

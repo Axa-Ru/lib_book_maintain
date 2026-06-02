@@ -5,7 +5,7 @@
 from library_class import Library
 import logging
 
-def automation_join_series(library: 'Library') -> int:
+def automation_join_series(library: 'Library', stats: dict):
     logging.info("Шаг 3: Поиск и объединение похожих серий внутри авторов...")
     for lang, letters in library.catalog.items():
         for letter, authors in letters.items():
@@ -44,6 +44,7 @@ def automation_join_series(library: 'Library') -> int:
                             success = series_secondary.join_with(series_primary, author.folder_path)
 
                             if success:
+                                stats["merged_series"] += 1
                                 logging.info(
                                     f" Объединены серии: {series_secondary.name} ──> {series_primary.name}")
                                 processed_series_paths.add(author.folder_path / series_secondary.name)
