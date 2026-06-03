@@ -3,6 +3,7 @@
 #-------------------------------------------------------------
 
 from library_class import Library
+from utils import replace_latin_with_cyrillic
 import logging
 
 
@@ -15,6 +16,10 @@ def automation_norm_book_name(library: 'Library', book_cfg: dict, stats: dict):
                     for book in series.books:
                         # Передаем словарь конфигурации книги целиком (Исправление AttributeError)
                         new_stem = book.sanitize_name(book_cfg)
+                        # Защита от скрытой латиницы в именах файлов книг
+                        if lang.lower() == "ru" and new_stem:
+                            new_stem = replace_latin_with_cyrillic(new_stem)
+
                         new_filename = f"{new_stem}.epub"
 
                         if book.path.name != new_filename:

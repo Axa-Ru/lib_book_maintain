@@ -3,7 +3,9 @@
 #-------------------------------------------------------------
 
 from library_class import Library
+from utils import replace_latin_with_cyrillic
 import logging
+
 
 def automation_norm_library(library: 'Library') -> None:
     logging.info("Шаг 1: Нормализация имен авторов...")
@@ -14,6 +16,9 @@ def automation_norm_library(library: 'Library') -> None:
 
                 # Метод очищает ФИО и перезаписывает self.name внутри объекта
                 author._normalize_name()
+                # Защита от скрытой латиницы для русской зоны
+                if lang.lower() == "ru":
+                    author.name = replace_latin_with_cyrillic(author.name)
                 new_folder_name = author.name
 
                 # Если имя изменилось, синхронизируем физическую папку на диске

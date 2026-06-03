@@ -2,6 +2,7 @@
 # module: src/automation_norm_series.py
 #-------------------------------------------------------------
 from library_class import Library
+from utils import replace_latin_with_cyrillic
 import logging
 
 def automation_norm_series(library: 'Library', replaces: dict) -> int:
@@ -14,6 +15,9 @@ def automation_norm_series(library: 'Library', replaces: dict) -> int:
                     if not series.is_virtual:
                         old_name = series.name
                         new_name = series.sanitize_name(replaces)
+                        # Защита от скрытой латиницы в сериях
+                        if lang.lower() == "ru" and new_name:
+                            new_name = replace_latin_with_cyrillic(new_name)
 
                         if old_name != new_name and new_name:
                             old_path = author.folder_path / old_name

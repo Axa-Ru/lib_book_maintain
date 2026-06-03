@@ -50,6 +50,29 @@ def capitalize_first_letters(text: str) -> str:
     return "".join(tokens)
 
 
+# Словарь соответствия: слева кириллица, справа латиница
+_CYR_TO_LAT = str.maketrans({
+    'А': 'A', 'В': 'B', 'Е': 'E', 'Н': 'H', 'К': 'K', 'М': 'M',
+    'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X',
+    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'х': 'x'
+})
+
+# Словарь соответствия: слева латиница, справа кириллица
+_LAT_TO_CYR = str.maketrans({
+    'A': 'А', 'B': 'В', 'E': 'Е', 'H': 'Н', 'K': 'К', 'M': 'М',
+    'O': 'О', 'P': 'Р', 'C': 'С', 'T': 'Т', 'X': 'Х',
+    'a': 'а', 'e': 'е', 'o': 'о', 'p': 'р', 'c': 'с', 'x': 'х'
+})
+
+
+def replace_cyrillic_with_latin(text: str) -> str:
+    return text.translate(_CYR_TO_LAT)
+
+
+def replace_latin_with_cyrillic(text: str) -> str:
+    return text.translate(_LAT_TO_CYR)
+
+
 def apply_title_replacements(text: str, replacements: list) -> str:
     """
     Применяет список замен подстрок к переданному тексту на основе
