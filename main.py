@@ -33,7 +33,6 @@ def setup_logging(config: dict):
     )
 
 
-
 def main():
     config_path = "profile/traum.toml"  # Конфиг лежит в папке profile, как указано в ТЗ
 

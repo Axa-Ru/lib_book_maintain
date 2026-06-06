@@ -1,79 +1,142 @@
-from typing import Dict, List
-import re
+# -------------------------------------------------------------
+# module: src/series_class.py
+# -------------------------------------------------------------
+
+import logging
 from pathlib import Path
-from utils import capitalize_first_letters
+from utils import sanitize_text_base
 
 
 class Series:
     """Класс, описывающий серию книг.
     Если имя серии пустое (""), объект считается виртуальной серией для одиночных книг.
     """
+
     def __init__(self, name: str = ""):
-        self.name = name.strip()
-        self.books: List['Book'] = []
+        # self.name хранит строго точное физическое имя папки с диска "как есть"
+        self.name = name
+
+        # Поле целевого состояния: идеальное имя серии (по умолчанию такое же)
+        self.new_name = name
+
+        self.books = []
+        self._is_virtual = (name == "")
 
     @property
     def is_virtual(self) -> bool:
         """Показывает, является ли серия заглушкой для одиночных книг."""
-        return self.name == ""
+        return self._is_virtual
 
-    def sanitize_name(self, replaces: Dict[str, str]) -> str:
-        """Реализация ТЗ очистки названия серии (бывшая функция sanitize_series_name)."""
-        name = self.name
-
-        # 1. Замены подстрок из словаря replaces
-        for old_value, new_value in replaces.items():
-            name = name.replace(old_value, new_value)
-
-        # 2. Убрать знаки препинания ",?:"
-        name = re.sub(r'[,?:]', '', name)
-
-        # 3. Если есть пробел между точками, удалить его
-        while True:
-            new_name = re.sub(r'\.\s+\.', '..', name)
-            if new_name == name:
-                break
-            name = new_name
-
-        # 4. Внутри названия убрать дублирующие точки, заменив их одной
-        name = re.sub(r'\.{2,}', '.', name)
-
-        # 5. Если между словами есть дефис, убрать пробелы вокруг дефиса
-        name = re.sub(r'\s*-\s*', '-', name)
-
-        # 6. Убрать лидирующие, концевые и дублирующие пробелы
-        name = re.sub(r'\s+', ' ', name)
-        name = name.strip()
-
-        # 7. Если в конце названия есть точки, убрать их
-        name = re.sub(r'\.+$', '', name)
-        name = name.strip()
-
-        if not name:
+    def sanitize_name(self, replaces: dict) -> str:
+        """
+        Базовая очистка названия серии от подстрок-мусора на основе словаря конфигурации.
+        """
+        if not self.name or self.is_virtual:
             return ""
 
-        # 8. Перевести раскладку в соответствии с правилами русского языка
-        name = capitalize_first_letters(name)
+        result_name = self.name
+        # Применяем текстовые замены подстрок из TOML-конфигурации
+        for old_value, new_value in replaces.items():
+            if old_value.lower() in result_name.lower():
+                import re
+                result_name = re.sub(re.escape(old_value), new_value, result_name, flags=re.IGNORECASE)
 
-        # Обновляем имя внутри объекта после очистки
-        self.name = name
-        return name
+        return result_name.strip()
 
-    def join_with(self, other_series: 'Series', author_folder: Path) -> bool:
+    def compute_new_name(self, replaces: dict, author_name: str, base_lang: str = "ru"):
         """
-        Поглощает текущую серию (self) другой серией (other_series).
-        Переносит уникальные книги, разрешает конфликты дубликатов по размеру
-        и удаляет пустую исходную папку текущей серии.
+        [Версия 0.9.3] Вычисляет идеальное имя серии, инкапсулируя все правила очистки.
+        Результат фиксируется во внутреннем поле целевого состояния self.new_name.
+        """
+        from utils import fix_uppercase_text, strip_spaces_inside_brackets, remove_author_name_from_text
+
+          # 1 Сначала делаем базовые текстовые замены из TOML
+        res = self.sanitize_name(replaces)
+
+        # 2 Выполняем нормализацию и схлопывание пробелов
+        res = sanitize_text_base(res, base_lang=base_lang)
+
+        # 3 чистим скобки
+        res = strip_spaces_inside_brackets(res)
+
+        # 4 Вырезаем дубликат имени автора из названия серии
+        res = remove_author_name_from_text(res, author_name)
+
+        # 5 Переводим в правильный регистр (первая заглавная)
+        res = fix_uppercase_text(res)
+
+        # Фиксируем идеальное имя
+        self.new_name = res
+
+    def _check_name_similarity(self, other_name: str, config: dict) -> bool:
+        """Внутренний метод для нечеткого сравнения названий серий."""
+        from rapidfuzz import fuzz
+
+        s1 = self.new_name.replace("'", "").replace('"', "").lower().strip()
+        s2 = other_name.replace("'", "").replace('"', "").lower().strip()
+
+        if s1 == s2:
+            return True
+
+        # Извлекаем порог совпадения серий из конфигурации TOML
+        series_cfg = config.get("series", {})
+        threshold = series_cfg.get("compare_ratio", 81)
+
+        # Вычисляем коэффициент схожести по множествам слов
+        ratio = fuzz.token_set_ratio(s1, s2)
+        return ratio >= threshold
+
+    def _check_books_match(self, other_series: 'Series') -> bool:
+        """Внутренний метод проверки контекста книг между двумя сериями."""
+        for my_book in self.books:
+            for other_book in other_series.books:
+                if my_book.is_same_as(other_book):
+                    return True
+        return False
+
+    def is_same_as(self, other_series: 'Series', config: dict) -> bool:
+        """Главный публичный метод сопоставления серий (Имена -> Контекст книг)."""
+        # 1. Проверяем схожесть вычисленных названий серий
+        if self._check_name_similarity(other_series.new_name, config):
+            return True
+
+        # 2. Если имена не похожи, проверяем пересечение по книгам внутри серий
+        if self._check_books_match(other_series):
+            return True
+
+        return False
+
+    def join_with(self, other_series: 'Series', target_author_folder: Path) -> bool:
+        """
+        [Версия 0.9.3] Физически поглощает текущую серию другой серией.
+        target_author_folder — это папка ГЛАВНОГО автора, куда перемещаются книги.
         """
         import shutil
 
-        source_dir = author_folder / self.name
-        target_dir = author_folder / other_series.name
+        # 🔥 ИСПРАВЛЕНО: Если это виртуальная серия (слияние одиночных книг в корнях)
+        if self.is_virtual:
+            # Для виртуальной серии исходный и целевой каталоги — это сами корни авторов.
+            # Нам нужно понять, где корень исходного автора. Мы берем его из пути первой книги.
+            if self.books and len(self.books) > 0:
+                source_dir = self.books[0].path.parent
+            else:
+                return True  # Если книг в корне нет, перенос не требуется
+            target_dir = target_author_folder
+        else:
+            # 🔥 ИСПРАВЛЕНО: Для реальной серии мы определяем её исходный путь на диске
+            # строго по её книгам, чтобы гарантированно не перепутать папки авторов!
+            if self.books and len(self.books) > 0:
+                source_dir = self.books[0].path.parent
+            else:
+                # Если папка серии на диске уже пустая — слияние не требуется, но её надо удалить
+                return True
+
+            target_dir = target_author_folder / other_series.name
 
         if not source_dir.exists() or not target_dir.exists():
             return False
 
-        # Обходим копию списка книг текущей (поглощаемой) серии
+        # Обходим копию списка книг текущей серии
         for my_book in list(self.books):
             target_book_path = target_dir / my_book.path.name
 
@@ -81,11 +144,7 @@ class Series:
             if not target_book_path.is_file():
                 try:
                     shutil.move(str(my_book.path), str(target_dir))
-
-                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обновляем путь внутри самого объекта книги,
-                    # чтобы при последующих сравнениях он указывал на её новое физическое место!
-                    my_book.path = target_book_path
-
+                    my_book.path = target_book_path  # Синхронизируем путь в памяти
                     other_series.books.append(my_book)
                 except Exception:
                     return False
@@ -96,93 +155,23 @@ class Series:
 
             if result == 1:
                 # Текущий файл больше/лучше — удаляем старый, перемещаем новый
-                # missing_ok=True гарантирует, что если файл пропал, код не упадет
                 target_book_path.unlink(missing_ok=True)
-
                 try:
                     shutil.move(str(my_book.path), str(target_dir))
-                    my_book.path = target_book_path  # 🔥 Обновляем путь в объекте
+                    my_book.path = target_book_path
                     other_series.books.append(my_book)
                 except Exception:
                     return False
             elif result == 2 or result == 0:
-                # На диске файл лучше или равен — текущую копию просто удаляем
-                # 🔥 ИСПРАВЛЕНО: missing_ok=True защищает от FileNotFoundError
+                # На диске файл лучше или равен — текущую копию просто удаляем с диска
                 my_book.path.unlink(missing_ok=True)
 
-        # После переноса всех книг удаляем пустую исходную папку серии
-        try:
-            source_dir.rmdir()
-            return True
-        except OSError:
-            return False
+        # После переноса всех файлов удаляем пустую исходную папку серии на диске (если она реальная)
+        if not self.is_virtual:
+            try:
+                source_dir.rmdir()
+                return True
+            except OSError:
+                return False
 
-    def _has_same_book(self, other_series: 'Series') -> bool:
-        """
-        Приватный метод для проверки контекста книг между двумя сериями.
-        Возвращает True, если в обеих сериях совпадает хотя бы одно
-        название произведения (book.title), независимо от имени файла.
-        """
-        my_books = {b.title.lower().strip() for b in self.books if b.title}
-        other_books = {b.title.lower().strip() for b in other_series.books if b.title}
-
-        if not my_books or not other_books:
-            return False
-
-        # Находим пересечение (общие книги)
-        common_books = my_books.intersection(other_books)
-        return len(common_books) > 0
-
-
-    def _check_name_similarity(self, other_name: str, config: dict) -> bool:
-        """
-        Внутренний метод для нечеткого сравнения названий серий.
-        Полностью сохраняет отлаженный алгоритм token_set_ratio.
-        """
-        from rapidfuzz import fuzz
-
-        # Наша стандартная очистка строк от кавычек и пробелов
-        s1 = self.name.replace("'", "").replace('"', "").lower().strip()
-        s2 = other_name.replace("'", "").replace('"', "").lower().strip()
-
-        if s1 == s2:
-            return True
-
-        # Извлекаем порог совпадения из секции [series] конфигурации TOML
-        series_cfg = config.get("series", {})
-        threshold = series_cfg.get("compare_ratio", 81)
-
-        # Вычисляем коэффициент схожести по множествам слов
-        ratio = fuzz.token_set_ratio(s1, s2)
-        return ratio >= threshold
-
-
-    def _check_books_match(self, other_series: 'Series') -> bool:
-        """
-        Внутренний метод проверки контекста книг между двумя сериями.
-        Делегирует сравнение объектам класса Book.
-        """
-        # Попарно сравниваем каждую книгу текущей серии с книгами другой серии
-        for my_book in self.books:
-            for other_book in other_series.books:
-                # Используем чистый метод класса Book
-                if my_book.is_same_as(other_book):
-                    return True
-        return False
-
-
-    def is_same_as(self, other_series: 'Series', config: dict) -> bool:
-        """
-        Главный публичный метод сопоставления серий.
-        Реализует каскадный фильтр: сначала проверяет имя,
-        если имена разные — заглядывает внутрь и проверяет книги.
-        """
-        # 1. Сначала проверяем схожесть названий серий
-        if self._check_name_similarity(other_series.name, config):
-            return True
-
-        # 2. Если имена не похожи, проверяем книги внутри серий
-        if self._check_books_match(other_series):
-            return True
-
-        return False
+        return True

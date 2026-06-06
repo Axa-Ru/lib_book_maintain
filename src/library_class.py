@@ -113,3 +113,79 @@ class Library:
     def __repr__(self) -> str:
         langs = list(self.catalog.keys())
         return f"<Library base_path={self.base_path} languages={langs}>"
+
+
+    def validate_structure(self) -> bool:
+        """
+        [Версия 0.9.3] Строгий инспектор архитектуры библиотеки с авто-остановкой.
+        Проверяет соблюдение 4-х уровневой иерархии: Язык -> Буква -> Автор -> Серия.
+        При обнаружении любого мусорного объекта генерирует RuntimeError и останавливает скрипт.
+        """
+        import logging
+
+        base_path = self.base_path
+        if not base_path.exists() or not base_path.is_dir():
+            raise RuntimeError(f"Критическая ошибка: Базовый путь библиотеки {base_path} не найден.")
+
+        logging.info(f"🔍 Запуск строгого инспектора структуры для: {base_path}")
+
+        # Список разрешенных языковых зон
+        allowed_langs = {"ru", "en"}
+
+        # === УРОВЕНЬ 1: Проверка корневого каталога (Только папки ru/en) ===
+        for lang_item in base_path.iterdir():
+            if lang_item.name.startswith('.'):
+                continue  # Безопасный пропуск системных скрытых файлов
+
+            if not lang_item.is_dir() or lang_item.name.lower() not in allowed_langs:
+                error_msg = f"Критическая аномалия [Уровень 1]: Чужеродный объект в корне библиотеки: '{lang_item.relative_to(base_path)}'"
+                logging.error(f"❌ {error_msg}")
+                raise RuntimeError(error_msg)
+
+            # === УРОВЕНЬ 2: Проверка языкового каталога (Только папки одиночных букв) ===
+            for letter_item in lang_item.iterdir():
+                if letter_item.name.startswith('.'):
+                    continue
+
+                if not letter_item.is_dir() or len(letter_item.name) > 1:
+                    error_msg = f"Критическая аномалия [Уровень 2]: Некорректный каталог буквы в '{lang_item.name}': '{letter_item.name}'"
+                    logging.error(f"❌ {error_msg}")
+                    raise RuntimeError(error_msg)
+
+                # === УРОВЕНЬ 3: Проверка каталога буквы (Только папки авторов) ===
+                for author_item in letter_item.iterdir():
+                    if author_item.name.startswith('.'):
+                        continue
+
+                    if not author_item.is_dir():
+                        error_msg = f"Критическая аномалия [Уровень 3]: Обнаружен файл вместо папки автора в '{lang_item.name}/{letter_item.name}': '{author_item.name}'"
+                        logging.error(f"❌ {error_msg}")
+                        raise RuntimeError(error_msg)
+
+                    # === УРОВЕНЬ 4: Проверка каталога автора (Только папки серий или файлы .epub) ===
+                    for content_item in author_item.iterdir():
+                        if content_item.name.startswith('.'):
+                            continue
+
+                        if content_item.is_file():
+                            if content_item.suffix.lower() != '.epub':
+                                error_msg = f"Критическая аномалия [Уровень 4]: Чужеродный файл в корне автора '{author_item.name}': '{content_item.name}'"
+                                logging.error(f"❌ {error_msg}")
+                                raise RuntimeError(error_msg)
+                        elif content_item.is_dir():
+                            # Внутри папки серии разрешены ТОЛЬКО файлы .epub, никаких глубоких вложений!
+                            for series_item in content_item.iterdir():
+                                if series_item.name.startswith('.'):
+                                    continue
+
+                                if series_item.is_dir():
+                                    error_msg = f"Критическая аномалия [Уровень 5]: Глубокий вложенный каталог внутри серии '{content_item.name}': '{series_item.relative_to(base_path)}'"
+                                    logging.error(f"❌ {error_msg}")
+                                    raise RuntimeError(error_msg)
+                                elif series_item.is_file() and series_item.suffix.lower() != '.epub':
+                                    error_msg = f"Критическая аномалия [Уровень 5]: Мусорный файл внутри серии '{content_item.name}': '{series_item.name}'"
+                                    logging.error(f"❌ {error_msg}")
+                                    raise RuntimeError(error_msg)
+
+        logging.info("✨ Структура библиотеки идеальна! Сторонних объектов не обнаружено.")
+        return True
