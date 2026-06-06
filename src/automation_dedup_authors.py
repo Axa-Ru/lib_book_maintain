@@ -10,6 +10,13 @@ from author_class import Author
 
 
 def automation_dedup_authors(library: 'Library', author_cfg: dict, stats: dict):
+    """
+    Поиск и объединение дубликатов авторов (Индексная дедупликация по Фамилиям)
+    :param library:
+    :param author_cfg:
+    :param stats:
+    :return:
+    """
     if author_cfg.get("authors_deduplicate", True):
         logging.info("Шаг 5: Поиск и объединение дубликатов авторов (Индексная дедупликация по Фамилиям)...")
 

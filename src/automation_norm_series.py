@@ -8,9 +8,12 @@ from library_class import Library
 
 def automation_norm_series(library: 'Library', replaces: dict) -> None:
     """
-    [Версия 0.9.3] Шаг 2: Нормализация названий серий и их папок.
+    Нормализация названий серий и их папок.
     Каждая серия сама рассчитывает своё целевое идеальное имя (new_name),
     после чего происходит безопасное физическое переименование папки на диске.
+    :param library:
+    :param replaces:
+    :return:
     """
     logging.info("Шаг 2: Нормализация названий серий...")
 

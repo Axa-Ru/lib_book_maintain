@@ -14,6 +14,11 @@ from library_class import Library
 
 
 def automation_norm_library(library: 'Library') -> None:
+    """
+    Нормализация имен авторов...
+    :param library:
+    :return: None
+    """
     logging.info("Шаг 1: Нормализация имен авторов...")
     for lang, letters in library.catalog.items():
         # lang содержит "ru" или "en" — передаем эту строку как base_lang

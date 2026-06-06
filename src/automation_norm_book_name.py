@@ -8,8 +8,12 @@ from library_class import Library
 
 def automation_norm_book_name(library: 'Library', book_cfg: dict, stats: dict):
     """
-    [Версия 0.9.3] Шаг 4: Нормализация имен файлов книг.
+    Нормализация имен файлов книг.
     Переименовывает файлы в их идеальное состояние СТРОГО внутри текущих папок.
+    :param library:
+    :param book_cfg:
+    :param stats:
+    :return:
     """
     logging.info("Шаг 4: Нормализация имен файлов книг...")
 
