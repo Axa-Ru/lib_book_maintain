@@ -3,62 +3,81 @@
 # -------------------------------------------------------------
 
 import logging
-from library_class import Library
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 
-
-def automation_join_series(library: 'Library', stats: dict):
+def automation_join_series(authors: List[Any], stats: Optional[Dict[str, Any]] = None) -> int:
     """
-    Поиск и объединение похожих серий внутри авторов.
-    Сравнивает и склеивает дублирующиеся папки серий (например, "Сага Содружества" и "Сага о Содружестве"),
-    физически перенося книги в одну общую папку.
-    :param library:
-    :param stats:
-    :return:
+    [Версия 0.9.6] Поиск и объединение похожих серий внутри каждого автора.
+    Устраняет дубликаты, возникшие из-за разницы в регистре символов (Case-Insensitive).
+    Синхронизирован со списком структуры серий author.series_list.
     """
-    logging.info("Шаг 3: Поиск и объединение похожих серий внутри авторов...")
+    if stats is None:
+        stats = {"merged_series": 0}
 
-    for lang, letters in library.catalog.items():
-        for letter, authors in letters.items():
-            for author in authors:
+    local_merged_count = 0
+    # Кэш имен в нижнем регистре для предотвращения межвиткового зацикливания
+    processed_series_names = set()
 
-                # Собираем актуальный список реальных серий автора по их текущему физическому имени
-                real_series_list = [s for s in author.series_list if not s.is_virtual and s.name.strip()]
-                processed_series_names = set()
+    for author in authors:
+        # 🔥 ФИКС 1: Проверяем реальное свойство списочной структуры автора
+        if not hasattr(author, 'series_list') or not author.series_list:
+            continue
 
-                for i in range(len(real_series_list)):
-                    series_a = real_series_list[i]
-                    if series_a.name in processed_series_names:
-                        continue
+        # 🔥 ФИКС 2: Итерируем по изолированной копии списка серий автора
+        current_series_list = list(author.series_list)
 
-                    for j in range(i + 1, len(real_series_list)):
-                        series_b = real_series_list[j]
-                        if series_b.name in processed_series_names:
-                            continue
+        for i, series_secondary in enumerate(current_series_list):
+            # Виртуальную серию для одиночных книг из корня пропускаем — она не сливается как папка
+            if series_secondary.is_virtual:
+                continue
 
-                        # ООП-ВЫЗОВ: Серия сопоставляет свои токены target-состояния (new_name)
-                        if series_a.is_same_as(series_b, library.config):
+            # Если серия уже была поглощена ранее, пропускаем её
+            sec_name_lower = series_secondary.name.lower()
+            if sec_name_lower in processed_series_names:
+                continue
 
-                            # Приоритет отдаем более полному/длинному названию папки
-                            if len(series_a.name) >= len(series_b.name):
-                                series_primary = series_a
-                                series_secondary = series_b
-                            else:
-                                series_primary = series_b
-                                series_secondary = series_a
+            # Ищем, с какой серией из оставшихся можно слить текущую
+            for series_primary in current_series_list[i + 1:]:
+                if series_primary.is_virtual:
+                    continue
 
-                            # Выполняем физический перенос уникальных книг на диске и удаление пустой папки
-                            success = series_secondary.join_with(series_primary, author.folder_path)
+                prim_name_lower = series_primary.name.lower()
 
-                            if success:
-                                if stats: stats["merged_series"] += 1
-                                logging.info(
-                                    f"  Объединены серии: '{series_secondary.name}' ──> '{series_primary.name}'")
+                # Если серии уже обработаны или это одна и та же серия в памяти — пропускаем
+                if prim_name_lower in processed_series_names or series_secondary == series_primary:
+                    continue
 
-                                # Помечаем поглощенную серию как удаленную, чтобы процессор больше её не трогал
-                                processed_series_names.add(series_secondary.name)
+                # Условие дублирования: совпадение имен без учета регистра символов
+                if sec_name_lower == prim_name_lower:
 
-                                # Если поглощающей серией оказалась серия B, прерываем внутренний цикл,
-                                # так как текущая серия A только что была физически уничтожена
-                                if series_primary == series_b:
-                                    break
+                    # Получаем путь к папке автора (поддерживаем как строки, так и Path)
+                    author_folder = Path(author.folder_path) if hasattr(author, 'folder_path') else Path(author.path)
 
+                    # Вызываем физическое слияние папок на диске [Метод Версии 0.9.5]
+                    success = series_secondary.join_with(series_primary, author_folder)
+
+                    if success:
+                        local_merged_count += 1
+                        stats["merged_series"] += 1
+
+                        # Извлекаем имена авторов для логов с защитой от отсутствующих атрибутов
+                        author_old = getattr(author, 'name', 'Unknown')
+                        author_new = getattr(author, 'new_name', author_old)
+
+                        logging.info(f"  Автор: Старое имя : {author_old}")
+                        logging.info(f"  Автор: Новое имя  : {author_new}")
+                        logging.info(f"  Объединены серии  : '{series_secondary.name}' ──> '{series_primary.name}'")
+
+                        # ФИКС ЗАЦИКЛИВАНИЯ 1: Маркируем обе серии в нижнем регистре
+                        processed_series_names.add(sec_name_lower)
+                        processed_series_names.add(prim_name_lower)
+
+                        # 🔥 ФИКС 3: Удаляем поглощенный объект из списка ОЗУ автора.
+                        if series_secondary in author.series_list:
+                            author.series_list.remove(series_secondary)
+
+                        # Так как текущая secondary-серия уничтожена, выходим к следующей
+                        break
+
+    return local_merged_count

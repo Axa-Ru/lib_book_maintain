@@ -33,7 +33,7 @@ _CYR_TWINS_SET = set(_RAW_LAT_TO_CYR.values())
 
 def sanitize_text_base(text: str, base_lang: str = "ru") -> str:
     """
-    [Версия 0.9.3] Общесистемная базовая очистка строки:
+    Общесистемная базовая очистка строки:
     1. Убирает множественные пробелы внутри строки.
     2. Удаляет пробелы и точки на концах строки.
     3. Выполняет умную токенизированную конвертацию раскладок (Мажоритарное голосование).
@@ -206,6 +206,22 @@ def fix_uppercase_text(text: str) -> str:
     # 2. 🔥 ЖЕЛЕЗНО: Делаем первую букву заглавной, сохраняя регистр остальных слов
     return text[0].upper() + text[1:] if len(text) > 1 else text.upper()
 
+
+def normalize_apostrophes(text: str) -> str:
+    """
+    [Версия 0.9.4] Унифицирует все известные графические двойники
+    кавычек, штрихов и знаков ударения в единый машинный апостроф '.
+    """
+    if not text:
+        return ""
+
+    # Список всех опасных Юникод-символов, имитирующих апостроф
+    bad_apostrophes = ['’', '‘', '`', '´', '′', '″', '՚', '׳', 'ʻ']
+
+    for bad_char in bad_apostrophes:
+        text = text.replace(bad_char, "'")
+
+    return text
 
 
 def strip_spaces_inside_brackets(text: str) -> str:

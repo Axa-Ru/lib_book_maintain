@@ -7,7 +7,9 @@ from book_class import Book
 
 
 class Library:
-    """Класс верхнего уровня для управления всей библиотекой книг."""
+    """
+    Класс верхнего уровня для управления всей библиотекой книг.
+    """
 
     def __init__(self, config: dict):
         self.config = config

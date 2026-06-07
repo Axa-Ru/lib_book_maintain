@@ -3,81 +3,84 @@
 # -------------------------------------------------------------
 
 import logging
-from library_class import Library
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 
-
-def automation_dedup_books(library: 'Library', stats: dict):
+def automation_dedup_books(authors: List[Any], stats: Optional[Dict[str, Any]] = None) -> int:
     """
-    Кросс-серийная дедупликация книг.
-    Находит дубликаты произведений между корнем автора (одиночки) и его реальными сериями.
-    Разрешает конфликты по размеру файлов и учитывает их в глобальной статистике stats.
-    :param library:
-    :param stats:
-    :return:
+    [Версия 0.9.6] Кросс-серийное схлопывание дубликатов книг (Корень <──> Подпапки).
+    Синхронизирован со списочной структурой серий author.series_list.
     """
-    logging.info("Шаг 4.5: Кросс-серийное схлопывание дубликатов книг (Корень <──> Подпапки)...")
+    if stats is None:
+        stats = {"deleted_books": 0} # Ключ приведен к единому стандарту оркестратора
 
-    for lang, letters in library.catalog.items():
-        for letter, authors in letters.items():
-            for author in authors:
+    local_dedup_count = 0
 
-                # Находим виртуальную серию автора (его корень)
-                virtual_series = next((s for s in author.series_list if s.is_virtual), None)
-                if not virtual_series or not virtual_series.books:
-                    continue  # Если в корнях у автора пусто — идем дальше
+    for author in authors:
+        # 🔥 ФИКС 1: Перебор по списочной структуре серий
+        if not hasattr(author, 'series_list') or not author.series_list:
+            continue
 
-                # Обходим копию списка одиночных книг в корне
-                for my_book in list(virtual_series.books):
-                    duplicate_found = False
+        # Собираем все серии автора для перекрестного анализа
+        all_series = list(author.series_list)
+        seen_books: Dict[str, Any] = {}
 
-                    # Ищем эту книгу во всех реальных сериях автора
-                    for real_series in author.series_list:
-                        if real_series.is_virtual:
-                            continue
+        for series in all_series:
+            if not hasattr(series, 'books') or not series.books:
+                continue
 
-                        for other_book in list(real_series.books):
-                            # ООП-сравнение чистых заголовков без учета номеров серий
-                            if my_book.is_same_as(other_book):
+            for book in list(series.books):
+                # Проверяем, существует ли файл физически на диске
+                if not book.path.exists():
+                    if book in series.books:
+                        series.books.remove(book)
+                    continue
 
-                                # Определяем точный физический путь серийной книги на диске
-                                target_book_path = other_book.path
+                # Формируем ключ дедупликации (идеальное имя файла без учета регистра)
+                book_key = getattr(book, 'new_name', book.path.name).lower()
 
-                                # Запускаем дуэль размеров
-                                res = my_book.compare_with(target_book_path)
+                # Если мы уже встречали эту книгу у этого автора в другой серии или корне
+                if book_key in seen_books:
+                    primary_book = seen_books[book_key]
 
-                                if res == 1:
-                                    # Книга в корне БОЛЬШЕ -> заменяем ею меньший файл внутри папки серии
-                                    target_book_path.unlink(missing_ok=True)
-                                    try:
-                                        import shutil
-                                        shutil.move(str(my_book.path), str(target_book_path))
+                    # Проверяем, существует ли первый найденный файл
+                    if not primary_book.path.exists():
+                        seen_books[book_key] = book
+                        continue
 
-                                        # Синхронизируем метаданные в памяти для оставшегося объекта
-                                        other_book.path = target_book_path
-                                        other_book.name = my_book.name
+                    # Запускаем дуэль размеров между дубликатами
+                    result = book.compare_with(primary_book.path)
 
-                                        # Удаляем одиночку из памяти корня
-                                        virtual_series.books.remove(my_book)
-                                        if stats: stats["deleted_books"] += 1
-                                        logging.info(
-                                            f"  [Кросс-дедупликация] Книга из корня перемещена в серию: '{my_book.name}'")
-                                    except Exception as e:
-                                        logging.error(f"  Не удалось заменить серийный файл книгой из корня: {e}")
+                    if result == 1:
+                        # Текущая книга лучше -> удаляем старую с диска и из её серии
+                        try:
+                            primary_book.path.unlink(missing_ok=True)
+                            for s in all_series:
+                                if primary_book in s.books:
+                                    s.books.remove(primary_book)
+                        except Exception as e:
+                            logging.error(f"Не удалось удалить худший дубликат {primary_book.path.name}: {e}")
 
-                                    duplicate_found = True
-                                    break
+                        # На место главной книги ставим текущую
+                        seen_books[book_key] = book
+                        local_dedup_count += 1
+                        stats["deleted_books"] += 1
+                        logging.info(f"  [Кросс-серия] Замена дубликата лучшим файлом: {book.path.name}")
 
-                                elif res == 2 or res == 0:
-                                    # Книга в серии БОЛЬШЕ или равна -> одиночку из корня просто выкидываем
-                                    my_book.path.unlink(missing_ok=True)
-                                    virtual_series.books.remove(my_book)
-                                    if stats: stats["deleted_books"] += 1
-                                    logging.info(
-                                        f"  [Кросс-дедупликация] Удален худший дубликат из корня автора: '{my_book.name}'")
+                    else:
+                        # Текущая книга хуже или равна -> удаляем её, а старую оставляем
+                        try:
+                            book.path.unlink(missing_ok=True)
+                            if book in series.books:
+                                series.books.remove(book)
+                        except Exception as e:
+                            logging.error(f"Не удалось удалить избыточный дубликат {book.path.name}: {e}")
 
-                                    duplicate_found = True
-                                    break
+                        local_dedup_count += 1
+                        stats["deleted_books"] += 1
+                        logging.info(f"  [Кросс-серия] Удален худший/равный дубликат книги: {book.path.name}")
 
-                        if duplicate_found:
-                            break
+                else:
+                    seen_books[book_key] = book
 
+    return local_dedup_count

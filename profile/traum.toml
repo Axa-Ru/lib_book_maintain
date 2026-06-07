@@ -20,7 +20,7 @@ ru_mlf = "ru_mlf"
 ru_lfm = "ru_lfm"
 
 [common]
-vrsion = "0.9.4"
+vrsion = "0.9.5"
 enable_logs = true          # логирование
 log_file = "traum.log"
 subs_ye_yo = true           # заменить букву "е" на "ё" в именах, сериях и названиях

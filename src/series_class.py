@@ -108,7 +108,7 @@ class Series:
 
     def join_with(self, other_series: 'Series', target_author_folder: Path) -> bool:
         """
-        [Версия 0.9.3] Физически поглощает текущую серию другой серией.
+        [Версия 0.9.5] Физически поглощает текущую серию другой серией.
         target_author_folder — это папка ГЛАВНОГО автора, куда перемещаются книги.
         """
         import shutil
@@ -128,12 +128,27 @@ class Series:
             if self.books and len(self.books) > 0:
                 source_dir = self.books[0].path.parent
             else:
-                # Если папка серии на диске уже пустая — слияние не требуется, но её надо удалить
+                # Если книг в памяти нет, но папка физически существует на диске — удаляем её,
+                # чтобы она не вызывала повторное зацикливание конвейера на Шаге 3.
+                fallback_source = target_author_folder / self.name
+                if fallback_source.exists() and fallback_source.is_dir():
+                    try:
+                        fallback_source.rmdir()
+                    except OSError:
+                        pass
                 return True
 
             target_dir = target_author_folder / other_series.name
 
-        if not source_dir.exists() or not target_dir.exists():
+        # 🔥 ИСПРАВЛЕНО: Если целевой папки серии на диске нет, её нужно создать.
+        # Иначе метод вернет False, логирование пропустится, и начнется бесконечный цикл.
+        if not target_dir.exists():
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                return False
+
+        if not source_dir.exists():
             return False
 
         # Обходим копию списка книг текущей серии
@@ -175,3 +190,4 @@ class Series:
                 return False
 
         return True
+

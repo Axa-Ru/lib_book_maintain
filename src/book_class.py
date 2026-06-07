@@ -135,20 +135,32 @@ class Book:
 
     def compute_new_name(self, author_name: str, book_cfg: dict, base_lang: str = "ru"):
         """
-        Вычисляет идеальное имя файла книги, принимая имя автора каталога явно.
+        [Версия 0.9.4] Вычисляет идеальное имя файла книги, принимая имя автора каталога.
+        Внедрена централизованная нормализация апострофов для полной синхронизации путей.
+        Результат фиксируется в self.new_name.
         """
+        from src.utils import normalize_apostrophes
+
+        # 1. Получаем физический стемм файла (без расширения)
         raw_stem = self.path.stem
+
+        # 🔥 ИСПРАВЛЕНО: Принудительно выпрямляем все виды Юникод-апострофов
+        # в стемме файла и в имени автора через единую точку правды в utils.py!
+        raw_stem = normalize_apostrophes(raw_stem)
+        clean_author_name = normalize_apostrophes(author_name)
+
+        # Вызываем базовый абстрактный санитайзер (пробелы, концевые точки, раскладки букв-двойников)
         clean_stem = sanitize_text_base(raw_stem, base_lang=base_lang)
 
-        # 1. Разбираем стемм на изолированные токены
-        self._parse_stem_to_tokens(clean_stem, author_name, book_cfg)
+        # 2. Разбираем стемм на изолированные токены, передавая чистейшего автора
+        self._parse_stem_to_tokens(clean_stem, clean_author_name, book_cfg)
 
-        # 2. Жестко усекаем длину названия ДО сборки результирующей строки
+        # Жестко усекаем длину названия произведения ПОСЛЕ токенизации, но ДО сборки строки
         self.validate_title_length(book_cfg)
 
-        # 3. Собираем идеальное имя файла обратно по вашему стандарту
+        # 3. Собираем идеальное имя файла обратно по вашему строгому стандарту
         if self.author and self.title:
-            # Книга лежит в реальной серии и у нее обнаружен номер тома
+            # Если книга лежит в РЕАЛЬНОЙ серии и у нее обнаружен номер тома
             if self.series and not self.series.is_virtual and self.series_index:
                 stem_result = f"{self.author} {self.series_index} {self.title}"
             else:
@@ -157,12 +169,13 @@ class Book:
         else:
             stem_result = self.title if self.title else clean_stem
 
-        # Приклеиваем семантические теги
+        # Приклеиваем семантические теги в круглых скобках в самый конец
         if self.tags:
             sorted_tags = sorted(list(self.tags))
             tags_string = " ".join(f"({tag})" for tag in sorted_tags)
             stem_result = f"{stem_result} {tags_string}"
 
+        # Фиксируем финальное целевое состояние имени файла с расширением
         self.new_name = f"{stem_result}.epub"
 
     def is_same_as(self, other_book: 'Book') -> bool:
